@@ -203,7 +203,7 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
                       shuffled_repertoire_inds[s_i*n_repertoires_per_split:]  # Remaining repertoires to last split
                       for s_i in range(n_splits)]
     else:
-        split_inds = [np.array(split_ind, dtype=np.int) for split_ind in split_inds]
+        split_inds = [np.array(split_ind, dtype=np.int64) for split_ind in split_inds]
     
     if cross_validation_fold >= len(split_inds):
         raise ValueError(f"Demanded `cross_validation_fold` {cross_validation_fold} but only {len(split_inds)} splits "
@@ -345,7 +345,7 @@ class RepertoireDataset(Dataset):
                 raise KeyError(f"Samples {self.sample_keys[unfound_samples]} "
                                f"could not be found in hdf5 file. Please add the samples and re-create the hdf5 file "
                                f"or remove the sample keys from the used samples of the metadata file.")
-            self.hdf5_inds = np.array([hdf5_sample_keys.index(sk) for sk in self.sample_keys], dtype=np.int)
+            self.hdf5_inds = np.array([hdf5_sample_keys.index(sk) for sk in self.sample_keys], dtype=np.int64)
             
             # Support old hdf5 format and check for missing hdf5 keys
             if self.sequence_counts_hdf5_key not in hf['sampledata'].keys():
@@ -510,7 +510,7 @@ class RepertoireDatasetSubset(Dataset):
             If None, all sequences will be loaded as specified in `dataset`.
             Can be set for individual samples using `sample_n_sequences` parameter of __getitem__() method.
         """
-        self.indices = np.asarray(indices, dtype=np.int)
+        self.indices = np.asarray(indices, dtype=np.int64)
         self.sample_n_sequences = sample_n_sequences
         self.repertoire_reader = dataset
         
