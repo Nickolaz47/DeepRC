@@ -1,0 +1,9 @@
+torch
+pandas
+h5py
+dill
+tqdm
+scikit-learn
+requests
+tensorboard
+git+https://github.com/widmi/widis-lstm-tools#egg=widis-lstm-tools

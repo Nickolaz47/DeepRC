@@ -225,14 +225,13 @@ class DatasetToHDF5(object):
                                              desc='Getting n_sequences per repertoire',
                                              total=len(self.repertoire_files)):
                     samples_infos.append(worker_rets)
-            
             (counts_per_sequence, seq_lens, min_seq_len, max_seq_len, avg_seq_len,
              n_sequences_per_sample) = zip(*samples_infos)
             counts_per_sequence = np.concatenate(counts_per_sequence, axis=0)
             seq_lens = np.concatenate(seq_lens, axis=0)
             sample_min_seq_len = np.asarray(min_seq_len, dtype=np.int64)
             sample_max_seq_len = np.asarray(max_seq_len, dtype=np.int64)
-            sample_avg_seq_len = np.asarray(avg_seq_len, dtype=np.float)
+            sample_avg_seq_len = np.asarray(avg_seq_len, dtype=np.float64)
             n_sequences_per_sample = np.asarray(n_sequences_per_sample, dtype=np.int64)
             sample_sequences_start_end = np.empty(shape=(*n_sequences_per_sample.shape, 2), dtype=np.int64)
             sample_sequences_start_end[:, 1] = np.cumsum(n_sequences_per_sample)

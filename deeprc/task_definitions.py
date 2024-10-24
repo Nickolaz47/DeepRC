@@ -170,7 +170,7 @@ class BinaryTarget(Target):
             Target values of all samples from `dataframe` as np.ndarray of datatype `np.float` and shape 
             `(n_samples, 1)`.
         """
-        return np.asarray(self.true_class_value[None] == dataframe[self.column_name].values[:, None], dtype=np.float)
+        return np.asarray(self.true_class_value[None] == dataframe[self.column_name].values[:, None], dtype=np.float64)
     
     def activation_function(self, raw_outputs: torch.Tensor) -> torch.Tensor:
         """Sigmoid activation function to apply to network outputs to create prediction
@@ -273,7 +273,7 @@ class MulticlassTarget(Target):
         self.column_name = column_name
         self.possible_target_values = np.array(possible_target_values)
         if class_weights is None:
-            class_weights = np.ones(shape=(len(self.possible_target_values),), dtype=np.float)
+            class_weights = np.ones(shape=(len(self.possible_target_values),), dtype=np.float64)
         self.__class_weights__ = torch.nn.Parameter(torch.tensor(class_weights, dtype=torch.float), requires_grad=False)
         self.cross_entropy_loss = torch.nn.CrossEntropyLoss(weight=self.__class_weights__, reduction='none')
     
@@ -293,7 +293,7 @@ class MulticlassTarget(Target):
             `(n_samples, len(self.possible_target_values))`.
         """
         return np.asarray(self.possible_target_values[None, :] == dataframe[self.column_name].values[:, None],
-                          dtype=np.float)
+                          dtype=np.float64)
     
     def activation_function(self, raw_outputs: torch.Tensor) -> torch.Tensor:
         """Softmax activation function to apply to network outputs to create prediction
@@ -381,7 +381,7 @@ class RegressionTarget(Target):
             Target values of all samples from `dataframe` as np.ndarray of datatype `np.float` and shape
             `(n_samples, 1)`.
         """
-        return (np.array(dataframe[self.column_name].values[:, None], dtype=np.float)
+        return (np.array(dataframe[self.column_name].values[:, None], dtype=np.float64)
                 - self.normalization_mean) / self.normalization_std
     
     def activation_function(self, raw_outputs: torch.Tensor) -> torch.Tensor:
