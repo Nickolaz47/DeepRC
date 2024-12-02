@@ -265,16 +265,16 @@ def train(model: torch.nn.Module, task_definition: TaskDefinition, early_stoppin
                             # Save checkpoint dictionary with currently best model to RAM
                             saver_loader.save_to_ram(savename=str(update))
                             # This would save to disk every time a new best model is found, which can be slow
-                            # saver_loader.save_to_file(filename=f'best_so_far_u{update}.tar.gzip')
+                            # saver_loader.save_to_file(filename=f'best_so_far_u{update}.zip')
                     
                     if update >= n_updates:
                         break
             update_progess_bar.close()
         finally:
             # In any case, save the current model and best model to a file
-            saver_loader.save_to_file(filename=f'lastsave_u{update}.tar.gzip')
+            saver_loader.save_to_file(filename=f'lastsave_u{update}.zip')
             state.update(saver_loader.load_from_ram())  # load best model so far
-            saver_loader.save_to_file(filename=f'best_u{update}.tar.gzip')
+            saver_loader.save_to_file(filename=f'best_u{update}.zip')
             print('Finished Training!')
     except Exception as e:
         with open(logfile, 'a') as lf:
