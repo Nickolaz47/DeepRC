@@ -331,6 +331,42 @@ class MulticlassTarget(Target):
         """
         return self.cross_entropy_loss(raw_outputs, targets.argmax(dim=-1))[..., None]
 
+    def get_scores(self, raw_outputs: torch.Tensor, targets: torch.Tensor) -> dict:
+    """Get scores for this task as dictionary containing accuracy, F1, AUC, and loss.
+    
+    Parameters
+        ----------
+        raw_outputs: torch.Tensor
+             Raw output of the DeepRC network for this task as torch.Tensor of shape
+            `(n_samples, 1)`.
+        targets: torch.Tensor
+             Targets for this task, as returned by .get_targets() as torch.Tensor of shape
+             `(n_samples, 1)`.
+        
+    Returns
+        ---------
+        scores: dict
+            Dictionary of format `{score_id: score_value}`, e.g. `{"auc": 0.6, "bacc": 0.5, "f1": 0.2, "loss": 0.01}`.
+    """
+    probabilities = torch.softmax(raw_outputs, dim=-1)
+    predictions = torch.argmax(probabilities, dim=-1)
+    true_labels = torch.argmax(targets, dim=-1)
+    
+    loss = self.loss_function(raw_outputs, targets).mean().cpu().item()  # .item() ensures it's a float
+    accuracy = metrics.accuracy_score(true_labels.cpu().numpy(), predictions.cpu().numpy())
+    f1 = metrics.f1_score(true_labels.cpu().numpy(), predictions.cpu().numpy(), average='weighted')
+    auc = metrics.roc_auc_score(targets.cpu().numpy(), probabilities.cpu().numpy(), multi_class='ovr', 
+                                average='weighted')
+    
+    scores = {
+        "accuracy": accuracy,
+        "f1": float(f1),
+        "auc": float(auc),
+        "loss": loss
+    }
+    
+    return scores
+
 
 class RegressionTarget(Target):
     def __init__(self, column_name: str, target_id: str = '', task_weight: float = 1., normalization_mean: float = 0.,
