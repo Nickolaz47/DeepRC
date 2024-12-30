@@ -366,13 +366,12 @@ class MulticlassTarget(Target):
                     multi_class="ovr",
                 )
             except ValueError as e:
-                print(f"ROC AUC calculation failed: {e}")
-                roc_auc = None
+                roc_auc = np.nan
         else:
-            roc_auc = None
+            roc_auc = np.nan
 
         return dict(
-            roc_auc=float(roc_auc) if roc_auc is not None else None,
+            roc_auc=float(roc_auc),
             accuracy=accuracy,
             f1=f1,
             loss=loss,
