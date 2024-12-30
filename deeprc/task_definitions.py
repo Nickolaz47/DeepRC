@@ -359,11 +359,15 @@ class MulticlassTarget(Target):
 
         unique_classes = np.unique(labels)
         if len(unique_classes) > 1:
-            roc_auc = metrics.roc_auc_score(
-                y_true=targets.detach().cpu().numpy(),
-                y_score=probabilities,
-                multi_class="ovr",
-            )
+            try:
+                roc_auc = metrics.roc_auc_score(
+                    y_true=targets.detach().cpu().numpy(),
+                    y_score=probabilities,
+                    multi_class="ovr",
+                )
+            except ValueError as e:
+                print(f"ROC AUC calculation failed: {e}")
+                roc_auc = None
         else:
             roc_auc = None
 
