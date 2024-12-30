@@ -371,10 +371,10 @@ class MulticlassTarget(Target):
             roc_auc = np.nan
 
         return dict(
-            roc_auc=float(roc_auc),
-            accuracy=accuracy,
-            f1=f1,
-            loss=loss,
+            roc_auc=round(float(roc_auc), 5),
+            accuracy=round(accuracy, 5),
+            f1=round(float(f1), 5),
+            loss=round(loss, 5),
         )
 
 
