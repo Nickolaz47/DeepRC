@@ -348,24 +348,31 @@ class MulticlassTarget(Target):
             scores: dict
                 Dictionary of format `{score_id: score_value}`, e.g. `{"auc": 0.6, "bacc": 0.5, "f1": 0.2, "loss": 0.01}`.
         """
-        probabilities = torch.softmax(raw_outputs, dim=-1)
-        predictions = torch.argmax(probabilities, dim=-1)
-        true_labels = torch.argmax(targets, dim=-1)
-        
-        loss = self.loss_function(raw_outputs, targets).mean().cpu().item()  # .item() ensures it's a float
-        accuracy = metrics.accuracy_score(true_labels.cpu().numpy(), predictions.cpu().numpy())
-        f1 = metrics.f1_score(true_labels.cpu().numpy(), predictions.cpu().numpy(), average='weighted')
-        auc = metrics.roc_auc_score(targets.cpu().numpy(), probabilities.cpu().numpy(), multi_class='ovr', 
-                                    average='weighted')
-        
-        scores = {
-            "accuracy": accuracy,
-            "f1": float(f1),
-            "auc": float(auc),
-            "loss": loss
-        }
-        
-        return scores
+        probabilities = self.activation_function(raw_outputs=raw_outputs).detach().cpu().numpy()
+
+        predictions = np.argmax(probabilities, axis=-1)
+        labels = np.argmax(targets.detach().cpu().numpy(), axis=-1)
+
+        accuracy = metrics.accuracy_score(y_true=labels, y_pred=predictions)
+        f1 = metrics.f1_score(y_true=labels, y_pred=predictions, average="weighted")
+        loss = self.loss_function(raw_outputs=raw_outputs, targets=targets).detach().mean().cpu().item()
+
+        unique_classes = np.unique(labels)
+        if len(unique_classes) > 1:
+            roc_auc = metrics.roc_auc_score(
+                y_true=targets.detach().cpu().numpy(),
+                y_score=probabilities,
+                multi_class="ovr",
+            )
+        else:
+            roc_auc = None
+
+        return dict(
+            roc_auc=float(roc_auc) if roc_auc is not None else None,
+            accuracy=accuracy,
+            f1=f1,
+            loss=loss,
+        )
 
 
 class RegressionTarget(Target):
