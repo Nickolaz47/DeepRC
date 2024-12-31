@@ -22,12 +22,12 @@ from deeprc.task_definitions import TaskDefinition
 def log_sequence_count_scaling(seq_counts: np.ndarray):
     """Scale sequence counts `seq_counts` using a natural element-wise logarithm. Values `< 1` are set to `1`.
     To be used for `deeprc.dataset_readers.make_dataloaders`.
-    
+
     Parameters
     ----------
     seq_counts
         Sequence counts as numpy array.
-    
+
     Returns
     ---------
     scaled_seq_counts
@@ -39,12 +39,12 @@ def log_sequence_count_scaling(seq_counts: np.ndarray):
 def no_sequence_count_scaling(seq_counts: np.ndarray):
     """No scaling of sequence counts `seq_counts`. Values `< 0` are set to `0`.
     To be used for `deeprc.dataset_readers.make_dataloaders`.
-    
+
     Parameters
     ----------
     seq_counts
         Sequence counts as numpy array.
-    
+
     Returns
     ---------
     scaled_seq_counts
@@ -58,13 +58,14 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
                      n_worker_processes: int = 4, batch_size: int = 4,
                      inputformat: str = 'NCL', keep_dataset_in_ram: bool = True,
                      sample_n_sequences: int = 10000,
+                     ask_for_input: bool = False,
                      metadata_file_id_column: str = 'ID', metadata_file_column_sep: str = '\t',
                      sequence_column: str = 'amino_acid', sequence_counts_column: str = 'templates',
                      repertoire_files_column_sep: str = '\t', filename_extension: str = '.tsv', h5py_dict: dict = None,
                      sequence_counts_scaling_fn: Callable = no_sequence_count_scaling, verbose: bool = True) \
         -> Tuple[DataLoader, DataLoader, DataLoader, DataLoader]:
     """Get data loaders for a dataset
-    
+
     Get data loaders for training set in training mode (with random subsampling) and training-, validation-, and
     test-set in evaluation mode (without random subsampling).
     Creates PyTorch data loaders for hdf5 containers or `.tsv`/`.csv` files, which will be converted to hdf5 containers
@@ -72,10 +73,10 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
     If provided,`set_inds` will determine which sample belongs to which split, otherwise random assignment of 
     3/5, 1/5, and 1/5 samples to the three splits is performed. Indices in `set_inds` correspond to line indices
     (excluding the header line) in `metadata_file`.
-    
+
     See `deeprc/examples/` for examples with custom datasets and datasets used in papers.
     See `deeprc/datasets/README.md` for information on supported dataset formats for custom datasets.
-    
+
     Parameters
     ----------
     task_definition: TaskDefinition
@@ -133,7 +134,7 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
         `deeprc.dataset_readers.no_sequence_count_scaling`.
     verbose : bool
         Activate verbose mode
-        
+
     Returns
     ---------
     trainingset_dataloader: DataLoader
@@ -157,24 +158,26 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
         # Convert to hdf5 container if no hdf5 container was given
         hdf5_file = repertoiresdata_path + ".hdf5"
         user_input = None
-        while user_input != 'y':
+        while user_input != 'y' and ask_for_input:
             user_input = input(f"Path {repertoiresdata_path} is not a hdf container. "
                                f"Should I create an hdf5 container {hdf5_file}? (y/n)")
             if user_input == 'n':
                 print("Process aborted by user")
                 exit()
         if verbose:
-            print(f"Converting: {repertoiresdata_path}\n->\n{hdf5_file} @{n_worker_processes} processes")
+            print(
+                f"Converting: {repertoiresdata_path}\n->\n{hdf5_file} @{n_worker_processes} processes")
         converter = DatasetToHDF5(
-                repertoiresdata_directory=repertoiresdata_path, sequence_column=sequence_column,
-                sequence_counts_column=sequence_counts_column, column_sep=repertoire_files_column_sep,
-                filename_extension=filename_extension, h5py_dict=h5py_dict, verbose=verbose)
-        converter.save_data_to_file(output_file=hdf5_file, n_workers=n_worker_processes)
+            repertoiresdata_directory=repertoiresdata_path, sequence_column=sequence_column,
+            sequence_counts_column=sequence_counts_column, column_sep=repertoire_files_column_sep,
+            filename_extension=filename_extension, h5py_dict=h5py_dict, verbose=verbose)
+        converter.save_data_to_file(
+            output_file=hdf5_file, n_workers=n_worker_processes)
         with h5py.File(hdf5_file, 'r') as hf:
             n_repertoires = hf['metadata']['n_samples'][()]
         if verbose:
             print(f"\tSuccessfully created {hdf5_file}!")
-    
+
     #
     # Create dataset
     #
@@ -188,7 +191,7 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
     n_samples = len(full_dataset)
     if verbose:
         print(f"\tFound and loaded a total of {n_samples} samples")
-    
+
     #
     # Create dataset split indices
     #
@@ -200,54 +203,56 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
         shuffled_repertoire_inds = rnd_gen.permutation(n_repertoires)
         split_inds = [shuffled_repertoire_inds[s_i*n_repertoires_per_split:(s_i+1)*n_repertoires_per_split]
                       if s_i != n_splits-1 else
-                      shuffled_repertoire_inds[s_i*n_repertoires_per_split:]  # Remaining repertoires to last split
+                      # Remaining repertoires to last split
+                      shuffled_repertoire_inds[s_i*n_repertoires_per_split:]
                       for s_i in range(n_splits)]
     else:
-        split_inds = [np.array(split_ind, dtype=np.int64) for split_ind in split_inds]
-    
+        split_inds = [np.array(split_ind, dtype=np.int64)
+                      for split_ind in split_inds]
+
     if cross_validation_fold >= len(split_inds):
         raise ValueError(f"Demanded `cross_validation_fold` {cross_validation_fold} but only {len(split_inds)} splits "
                          f"exist in `split_inds`.")
     testset_inds = split_inds.pop(cross_validation_fold)
     validationset_inds = split_inds.pop(cross_validation_fold-1)
     trainingset_inds = np.concatenate(split_inds)
-    
+
     #
     # Create datasets and dataloaders for splits
     #
     if verbose:
         print("Creating dataloaders for dataset splits")
-    
+
     training_dataset = RepertoireDatasetSubset(
-            dataset=full_dataset, indices=trainingset_inds, sample_n_sequences=sample_n_sequences)
+        dataset=full_dataset, indices=trainingset_inds, sample_n_sequences=sample_n_sequences)
     trainingset_dataloader = DataLoader(
-            training_dataset, batch_size=batch_size, shuffle=True, num_workers=n_worker_processes,
-            collate_fn=no_stack_collate_fn)
+        training_dataset, batch_size=batch_size, shuffle=True, num_workers=n_worker_processes,
+        collate_fn=no_stack_collate_fn)
 
     training_eval_dataset = RepertoireDatasetSubset(
-            dataset=full_dataset, indices=trainingset_inds, sample_n_sequences=None)
+        dataset=full_dataset, indices=trainingset_inds, sample_n_sequences=None)
     trainingset_eval_dataloader = DataLoader(
-            training_eval_dataset, batch_size=1, shuffle=False, num_workers=1, collate_fn=no_stack_collate_fn)
-    
+        training_eval_dataset, batch_size=1, shuffle=False, num_workers=1, collate_fn=no_stack_collate_fn)
+
     validationset_eval_dataset = RepertoireDatasetSubset(
-            dataset=full_dataset, indices=validationset_inds, sample_n_sequences=None)
+        dataset=full_dataset, indices=validationset_inds, sample_n_sequences=None)
     validationset_eval_dataloader = DataLoader(
-            validationset_eval_dataset, batch_size=1, shuffle=False, num_workers=1, collate_fn=no_stack_collate_fn)
-    
+        validationset_eval_dataset, batch_size=1, shuffle=False, num_workers=1, collate_fn=no_stack_collate_fn)
+
     testset_eval_dataset = RepertoireDatasetSubset(
-            dataset=full_dataset, indices=testset_inds, sample_n_sequences=None)
+        dataset=full_dataset, indices=testset_inds, sample_n_sequences=None)
     testset_eval_dataloader = DataLoader(
-            testset_eval_dataset, batch_size=1, shuffle=False, num_workers=1, collate_fn=no_stack_collate_fn)
-    
+        testset_eval_dataset, batch_size=1, shuffle=False, num_workers=1, collate_fn=no_stack_collate_fn)
+
     if verbose:
         print("\tDone!")
-    
+
     return trainingset_dataloader, trainingset_eval_dataloader, validationset_eval_dataloader, testset_eval_dataloader
 
 
 def no_stack_collate_fn(batch_as_list: list):
     """Function to be passed to `torch.utils.data.DataLoader` as `collate_fn`
-    
+
     Instead of stacking the samples in a minibatch into one torch.tensor object, sample entries will be individually
     converted to torch.tensor objects and packed into a list instead.
     Objects that could not be converted to torch.tensor objects are packed into a list without conversion.
@@ -272,11 +277,11 @@ class RepertoireDataset(Dataset):
                  keep_in_ram: bool = True, sequence_counts_scaling_fn: Callable = no_sequence_count_scaling,
                  sample_n_sequences: int = None, verbose: bool = True):
         """PyTorch Dataset class for reading repertoire dataset from metadata file and hdf5 file
-        
+
         See `deeprc.dataset_readers.make_dataloaders` for simple loading of datasets via PyTorch data loader.
         See `deeprc.dataset_readers.make_dataloaders` or `dataset_converters.py` for conversion of `.tsv`/`.csv` files
          to hdf5 container.
-        
+
         Parameters
         ----------
         metadata_filepath : str
@@ -317,17 +322,19 @@ class RepertoireDataset(Dataset):
         self.sequence_counts_hdf5_key = 'sequence_counts'
         self.sequences_hdf5_key = 'sequences'
         self.verbose = verbose
-        
+
         if self.inputformat not in ['NCL', 'LNC']:
             raise ValueError(f"Unsupported input format {self.inputformat}")
-        
+
         # Read target data from csv file
-        self.metadata = pd.read_csv(self.metadata_filepath, sep=self.metadata_file_column_sep, header=0, dtype=str)
+        self.metadata = pd.read_csv(
+            self.metadata_filepath, sep=self.metadata_file_column_sep, header=0, dtype=str)
         self.metadata.index = self.metadata[self.sample_id_column].values
-        self.sample_keys = np.array([os.path.splitext(k)[0] for k in self.metadata[self.sample_id_column].values])
+        self.sample_keys = np.array(
+            [os.path.splitext(k)[0] for k in self.metadata[self.sample_id_column].values])
         self.n_samples = len(self.sample_keys)
         self.target_features = self.task_definition.get_targets(self.metadata)
-        
+
         # Read sequence data from hdf5 file
         with h5py.File(self.filepath, 'r') as hf:
             metadata = hf['metadata']
@@ -337,16 +344,19 @@ class RepertoireDataset(Dataset):
             self.n_features = len(self.aas)
             self.stats = str_or_byte_to_str(metadata['stats'][()])
             self.n_samples = metadata['n_samples'][()]
-            hdf5_sample_keys = [str_or_byte_to_str(os.path.splitext(k)[0]) for k in metadata['sample_keys'][:]]
-            
+            hdf5_sample_keys = [str_or_byte_to_str(
+                os.path.splitext(k)[0]) for k in metadata['sample_keys'][:]]
+
             # Mapping metadata sample indices -> hdf5 file sample indices
-            unfound_samples = np.array([sk not in hdf5_sample_keys for sk in self.sample_keys], dtype=np.bool)
+            unfound_samples = np.array(
+                [sk not in hdf5_sample_keys for sk in self.sample_keys], dtype=np.bool)
             if np.any(unfound_samples):
                 raise KeyError(f"Samples {self.sample_keys[unfound_samples]} "
                                f"could not be found in hdf5 file. Please add the samples and re-create the hdf5 file "
                                f"or remove the sample keys from the used samples of the metadata file.")
-            self.hdf5_inds = np.array([hdf5_sample_keys.index(sk) for sk in self.sample_keys], dtype=np.int64)
-            
+            self.hdf5_inds = np.array([hdf5_sample_keys.index(
+                sk) for sk in self.sample_keys], dtype=np.int64)
+
             # Support old hdf5 format and check for missing hdf5 keys
             if self.sequence_counts_hdf5_key not in hf['sampledata'].keys():
                 if 'duplicates_per_sequence' in hf['sampledata'].keys():
@@ -362,12 +372,13 @@ class RepertoireDataset(Dataset):
                 else:
                     raise KeyError(f"Could not locate entry {self.sequences_hdf5_key}, which should contains "
                                    f"sequence counts, in hdf5 file. Only found keys {list(hf['sampledata'].keys())}.")
-            
+
             if keep_in_ram:
                 sampledata = dict()
                 sampledata['seq_lens'] = hf['sampledata']['seq_lens'][:]
                 sampledata[self.sequence_counts_hdf5_key] =\
-                    np.array(hf['sampledata'][self.sequence_counts_hdf5_key][:], dtype=np.float32)
+                    np.array(
+                        hf['sampledata'][self.sequence_counts_hdf5_key][:], dtype=np.float32)
                 if np.any(sampledata[self.sequence_counts_hdf5_key] <= 0):
                     print(f"Warning: Found {(sampledata[self.sequence_counts_hdf5_key] <= 0).sum()} sequences with "
                           f"counts <= 0. They will be handled as specified in the sequence_counts_scaling_fn "
@@ -376,17 +387,17 @@ class RepertoireDataset(Dataset):
                 self.sampledata = sampledata
             else:
                 self.sampledata = None
-            
+
             sample_sequences_start_end = hf['sampledata']['sample_sequences_start_end'][:]
             self.sample_sequences_start_end = sample_sequences_start_end[self.hdf5_inds]
-            
+
         self._vprint("File Stats:")
         self._vprint("  " + "  \n".join(self.stats.split('; ')))
         self._vprint(f"Used samples: {self.n_samples}")
-    
+
     def get_sample(self, idx: int, sample_n_sequences: Union[None, int] = None):
         """ Return repertoire with index idx from dataset, randomly sub-/up-sampled to `sample_n_sequences` sequences
-        
+
         Parameters
         ----------
         idx: int
@@ -396,7 +407,7 @@ class RepertoireDataset(Dataset):
             Number of sequences per repertoire might be smaller than `sample_n_sequences` if repertoire is smaller or
             random indices have been drawn multiple times.
             If None, will use `sample_n_sequences` as specified when creating `RepertoireDataset` instance.
-        
+
         Returns
         ---------
         aa_sequences: numpy int8 array
@@ -410,52 +421,56 @@ class RepertoireDataset(Dataset):
         """
         sample_sequences_start_end = self.sample_sequences_start_end[idx]
         if sample_n_sequences:
-            rnd_gen = np.random.RandomState()  # TODO: Add shared memory integer random seed for dropout
+            # TODO: Add shared memory integer random seed for dropout
+            rnd_gen = np.random.RandomState()
             sample_sequence_inds = np.unique(rnd_gen.randint(
-                    low=sample_sequences_start_end[0], high=sample_sequences_start_end[1],
-                    size=sample_n_sequences))
+                low=sample_sequences_start_end[0], high=sample_sequences_start_end[1],
+                size=sample_n_sequences))
             if self.sampledata is None:
                 # Compatibility for indexing hdf5 file
                 sample_sequence_inds = list(sample_sequence_inds)
         else:
-            sample_sequence_inds = slice(sample_sequences_start_end[0], sample_sequences_start_end[1])
-    
+            sample_sequence_inds = slice(
+                sample_sequences_start_end[0], sample_sequences_start_end[1])
+
         with h5py.File(self.filepath, 'r') as hf:
             if self.sampledata is not None:
                 sampledata = self.sampledata
             else:
                 sampledata = hf['sampledata']
-            
+
             seq_lens = sampledata['seq_lens'][sample_sequence_inds]
             sample_max_seq_len = seq_lens.max()
-            aa_sequences = sampledata[self.sequences_hdf5_key][sample_sequence_inds, :sample_max_seq_len]
+            aa_sequences = sampledata[self.sequences_hdf5_key][sample_sequence_inds,
+                                                               :sample_max_seq_len]
             counts_per_sequence = \
-                self.sequence_counts_scaling_fn(sampledata[self.sequence_counts_hdf5_key][sample_sequence_inds])
-    
+                self.sequence_counts_scaling_fn(
+                    sampledata[self.sequence_counts_hdf5_key][sample_sequence_inds])
+
         if self.inputformat.startswith('LN'):
             aa_sequences = np.swapaxes(aa_sequences, 0, 1)
         return aa_sequences, seq_lens, counts_per_sequence
-    
+
     def inds_to_aa(self, inds: np.array):
         """Convert array of AA indices to character array (see also `self.inds_to_aa_ignore_negative()`)"""
         lookup = np.chararray(shape=(len(self.aas),))
         lookup[:] = list(self.aas)
         char_array = lookup[inds]
         return char_array
-    
+
     def inds_to_aa_ignore_negative(self, inds: np.array):
         """Convert array of AA indices to character array, ignoring '-1'-padding to equal sequence length"""
         lookup = np.chararray(shape=(len(self.aas),))
         lookup[:] = list(self.aas)
         char_array = lookup[inds[inds >= 0]].tostring().decode('utf8')
         return char_array
-    
+
     def __len__(self):
         return self.n_samples
-    
+
     def __getitem__(self, idx, sample_n_sequences: Union[None, int] = None):
         """ Return repertoire with index idx from dataset, randomly sub-/up-sampled to `sample_n_sequences` sequences
-        
+
         Parameters
         ----------
         idx: int
@@ -465,7 +480,7 @@ class RepertoireDataset(Dataset):
             Number of sequences per repertoire might be smaller than `sample_n_sequences` if repertoire is smaller or
             random indices have been drawn multiple times.
             If None, will use `sample_n_sequences` as specified when creating `RepertoireDataset` instance.
-        
+
         Returns
         ---------
         target_features: numpy float32 array
@@ -485,9 +500,10 @@ class RepertoireDataset(Dataset):
         sample_id = str(self.sample_keys[idx])
         if sample_n_sequences is None:
             sample_n_sequences = self.sample_n_sequences
-        sequences, seq_lens, counts_per_sequence = self.get_sample(idx, sample_n_sequences)
+        sequences, seq_lens, counts_per_sequence = self.get_sample(
+            idx, sample_n_sequences)
         return target_features, sequences, seq_lens, counts_per_sequence, sample_id
-    
+
     def _vprint(self, *args, **kwargs):
         if self.verbose:
             print(*args, **kwargs)
@@ -496,7 +512,7 @@ class RepertoireDataset(Dataset):
 class RepertoireDatasetSubset(Dataset):
     def __init__(self, dataset: RepertoireDataset, indices: Union[list, np.ndarray], sample_n_sequences: int = None):
         """Create subset of `deeprc.dataset_readers.RepertoireDataset` dataset
-        
+
         Parameters
         ----------
         dataset
@@ -513,17 +529,17 @@ class RepertoireDatasetSubset(Dataset):
         self.indices = np.asarray(indices, dtype=np.int64)
         self.sample_n_sequences = sample_n_sequences
         self.repertoire_reader = dataset
-        
+
         self.inds_to_aa = self.repertoire_reader.inds_to_aa
         self.aas = self.repertoire_reader.aas
         self.inds_to_aa_ignore_negative = self.repertoire_reader.inds_to_aa_ignore_negative
-    
+
     def __len__(self):
         return len(self.indices)
-    
+
     def __getitem__(self, idx, sample_n_sequences: Union[None, int] = None):
         """ Return repertoire with index idx from dataset, randomly sub-/up-sampled to `sample_n_sequences` sequences
-        
+
         Parameters
         ----------
         idx: int
@@ -533,7 +549,7 @@ class RepertoireDatasetSubset(Dataset):
             Number of sequences per repertoire might be smaller than `sample_n_sequences` if repertoire is smaller or
             random indices have been drawn multiple times.
             If None, will use `sample_n_sequences` as specified when creating `RepertoireDatasetSubset` instance.
-        
+
         Returns
         ---------
         target_features: numpy float32 array
@@ -552,5 +568,6 @@ class RepertoireDatasetSubset(Dataset):
         if sample_n_sequences is None:
             sample_n_sequences = self.sample_n_sequences
         target_features, sequences, seq_lens, counts_per_sequence, sample_id = \
-            self.repertoire_reader.__getitem__(self.indices[idx], sample_n_sequences=sample_n_sequences)
+            self.repertoire_reader.__getitem__(
+                self.indices[idx], sample_n_sequences=sample_n_sequences)
         return target_features, sequences, seq_lens, counts_per_sequence, sample_id
