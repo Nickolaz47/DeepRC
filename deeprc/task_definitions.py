@@ -371,12 +371,27 @@ class MulticlassTarget(Target):
         else:
             roc_auc = np.nan
 
+        class_names = self.possible_target_values
+        class_accuracies = {}
+        for cls, class_name in enumerate(class_names):
+            cls_indices = labels == cls
+            if np.sum(cls_indices) > 0:
+                cls_accuracy = metrics.accuracy_score(
+                y_true=labels[cls_indices],
+                y_pred=predictions[cls_indices]
+                )
+                class_accuracies[f"{class_name}_acc"] = float(round(
+                    cls_accuracy, 5))
+            else:
+                class_accuracies[f"{class_name}_acc"] = float(np.nan)
+
         return dict(
             roc_auc=round(float(roc_auc), 5),
             accuracy=round(accuracy, 5),
             bacc=round(float(bacc), 5),
             f1=round(float(f1), 5),
             loss=round(loss, 5),
+            **class_accuracies
         )
 
 
