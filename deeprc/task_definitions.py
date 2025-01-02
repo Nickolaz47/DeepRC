@@ -354,6 +354,7 @@ class MulticlassTarget(Target):
         labels = np.argmax(targets.detach().cpu().numpy(), axis=-1)
 
         accuracy = metrics.accuracy_score(y_true=labels, y_pred=predictions)
+        bacc = metrics.balanced_accuracy_score(y_true=labels, y_pred=predictions)
         f1 = metrics.f1_score(y_true=labels, y_pred=predictions, average="weighted")
         loss = self.loss_function(raw_outputs=raw_outputs, targets=targets).detach().mean().cpu().item()
 
@@ -373,6 +374,7 @@ class MulticlassTarget(Target):
         return dict(
             roc_auc=round(float(roc_auc), 5),
             accuracy=round(accuracy, 5),
+            bacc=round(bacc, 5),
             f1=round(float(f1), 5),
             loss=round(loss, 5),
         )
