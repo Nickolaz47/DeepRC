@@ -374,7 +374,7 @@ class MulticlassTarget(Target):
         return dict(
             roc_auc=round(float(roc_auc), 5),
             accuracy=round(accuracy, 5),
-            bacc=round(bacc, 5),
+            bacc=round(float(bacc), 5),
             f1=round(float(f1), 5),
             loss=round(loss, 5),
         )
