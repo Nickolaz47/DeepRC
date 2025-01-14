@@ -17,6 +17,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from deeprc.dataset_converters import DatasetToHDF5
 from deeprc.task_definitions import TaskDefinition
+from sklearn.model_selection import StratifiedKFold
 
 
 def log_sequence_count_scaling(seq_counts: np.ndarray):
@@ -248,6 +249,74 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
         print("\tDone!")
 
     return trainingset_dataloader, trainingset_eval_dataloader, validationset_eval_dataloader, testset_eval_dataloader
+
+
+def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: str, repertoiresdata_path: str,
+                                stratify=False, n_splits=5, rnd_seed=0, **kwargs):
+    """
+    Generate data loaders for multiple tasks, ensuring stratified splitting for all targets.
+
+    Parameters
+    ----------
+    task_definition : TaskDefinition
+        TaskDefinition object containing the tasks to train the DeepRC model on.
+    metadata_file : str
+        Path to the metadata file (.tsv) containing sample labels.
+    repertoiresdata_path : str
+        Path to the dataset containing repertoire data or the hdf5 file.
+    stratify : bool, optional
+        Whether to perform stratified splitting based on combined sample classes. Default is False.
+    n_splits : int, optional
+        Number of splits for cross-validation. Default is 5.
+    rnd_seed : int, optional
+        Seed for reproducibility of splits. Default is 0.
+    kwargs : dict
+        Additional arguments passed to the original `make_dataloaders` function.
+
+    Returns
+    -------
+    tuple
+        DataLoaders for training, training evaluation, validation, and testing datasets.
+    """
+    if stratify:
+        print("Performing stratified splitting for multiple tasks...")
+        metadata = pd.read_csv(metadata_file, sep='\t')
+        
+        combined_labels = metadata[[target.column_name for target in task_definition.__targets__]].agg(tuple, axis=1)
+        # Convert combined_labels to a single string per row to represent unique combinations
+        combined_labels = combined_labels.apply(lambda x: "_".join(map(str, x)))
+
+        # Ensure StratifiedKFold gets a single 1D array of labels
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=rnd_seed)
+
+        # Debugging: Check unique label combinations
+        print(f"Processed label combinations: {combined_labels.unique()}")
+
+        # Perform stratified splitting
+        split_inds = []
+        for _, test_index in skf.split(X=np.zeros(len(combined_labels)), y=combined_labels):
+            split_inds.append(test_index)
+    else:
+        print("Skipping stratified splitting, using default splitting.")
+        return make_dataloaders(
+            task_definition=task_definition,
+            metadata_file=metadata_file,
+            repertoiresdata_path=repertoiresdata_path,
+            n_splits=n_splits,
+            rnd_seed=rnd_seed,
+            **kwargs
+        )
+
+    # Pass stratified indices to make_dataloaders
+    return make_dataloaders(
+        task_definition=task_definition,
+        metadata_file=metadata_file,
+        repertoiresdata_path=repertoiresdata_path,
+        split_inds=split_inds,
+        n_splits=n_splits,
+        rnd_seed=rnd_seed,
+        **kwargs
+    )
 
 
 def no_stack_collate_fn(batch_as_list: list):
