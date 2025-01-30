@@ -236,7 +236,7 @@ class BinaryTarget(Target):
         f1 = metrics.f1_score(y_true=labels, y_pred=predictions_thresholded, average='binary',
                               pos_label=1)
         loss = self.loss_function(raw_outputs=raw_outputs, targets=targets).detach().mean().cpu().item()
-        return dict(roc_auc=roc_auc, bacc=bacc, f1=f1, loss=loss)
+        return dict(roc_auc=float(roc_auc), bacc=float(bacc), f1=float(f1), loss=loss)
 
 
 class MulticlassTarget(Target):
