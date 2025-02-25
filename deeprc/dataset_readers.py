@@ -63,7 +63,8 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
                      metadata_file_id_column: str = 'ID', metadata_file_column_sep: str = '\t',
                      sequence_column: str = 'amino_acid', sequence_counts_column: str = 'templates',
                      repertoire_files_column_sep: str = '\t', filename_extension: str = '.tsv', h5py_dict: dict = None,
-                     sequence_counts_scaling_fn: Callable = no_sequence_count_scaling, verbose: bool = True) \
+                     sequence_counts_scaling_fn: Callable = no_sequence_count_scaling,
+                     verbose: bool = True, active_cv: bool = False) \
         -> Tuple[DataLoader, DataLoader, DataLoader, DataLoader]:
     """Get data loaders for a dataset
 
@@ -135,6 +136,10 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
         `deeprc.dataset_readers.no_sequence_count_scaling`.
     verbose : bool
         Activate verbose mode
+    active_cv : bool, optional
+        If True, uses a 4/5 for training and 1/5 for testing (cross-validation mode).
+        If False, uses a 3/5 for training, 1/5 for testing, and 1/5 for validation (traditional split).
+        Default is False.
 
     Returns
     ---------
@@ -215,7 +220,10 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
         raise ValueError(f"Demanded `cross_validation_fold` {cross_validation_fold} but only {len(split_inds)} splits "
                          f"exist in `split_inds`.")
     testset_inds = split_inds.pop(cross_validation_fold)
-    validationset_inds = split_inds.pop(cross_validation_fold-1)
+    if active_cv:
+        validationset_inds = testset_inds
+    else:
+        validationset_inds = split_inds.pop(cross_validation_fold-1)
     trainingset_inds = np.concatenate(split_inds)
 
     #
@@ -281,13 +289,16 @@ def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: 
     if stratify:
         print("Performing stratified splitting for multiple tasks...")
         metadata = pd.read_csv(metadata_file, sep='\t')
-        
-        combined_labels = metadata[[target.column_name for target in task_definition.__targets__]].agg(tuple, axis=1)
+
+        combined_labels = metadata[[
+            target.column_name for target in task_definition.__targets__]].agg(tuple, axis=1)
         # Convert combined_labels to a single string per row to represent unique combinations
-        combined_labels = combined_labels.apply(lambda x: "_".join(map(str, x)))
+        combined_labels = combined_labels.apply(
+            lambda x: "_".join(map(str, x)))
 
         # Ensure StratifiedKFold gets a single 1D array of labels
-        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=rnd_seed)
+        skf = StratifiedKFold(
+            n_splits=n_splits, shuffle=True, random_state=rnd_seed)
 
         # Debugging: Check unique label combinations
         print(f"Processed label combinations: {combined_labels.unique()}")
