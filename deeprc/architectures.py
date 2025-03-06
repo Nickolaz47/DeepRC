@@ -143,7 +143,7 @@ class SequenceEmbeddingLSTM(nn.Module):
 
 
 class AttentionNetwork(nn.Module):
-    def __init__(self, n_input_features: int, n_layers: int = 2, n_units: int = 32):
+    def __init__(self, n_input_features: int, n_layers: int = 2, n_units: int = 32, n_heads: int=1):
         """Attention network (`f()` in paper) as fully connected network.
          Currently only implemented for 1 attention head and query.
         
@@ -157,23 +157,30 @@ class AttentionNetwork(nn.Module):
             Number of attention layers to compute keys
         n_units : int
             Number of units in each attention layer
+        n_heads : int
+            Number of attention heads
         """
         super(AttentionNetwork, self).__init__()
-        self.n_attention_layers = n_layers
+
         self.n_units = n_units
+        self.n_heads = n_heads
+
+        fc_layers = []
+        for _ in range(n_layers):
+            fc_linear = nn.Linear(n_input_features, n_units)
+            fc_linear.weight.data.normal_(0.0, np.sqrt(1 / np.prod(fc_linear.weight.shape)))
+            fc_layers.append(fc_linear)
+            fc_layers.append(nn.SELU())
+            n_input_features = n_units
         
-        fc_attention = []
-        for _ in range(self.n_attention_layers):
-            att_linear = nn.Linear(n_input_features, self.n_units)
-            att_linear.weight.data.normal_(0.0, np.sqrt(1 / np.prod(att_linear.weight.shape)))
-            fc_attention.append(att_linear)
-            fc_attention.append(nn.SELU())
-            n_input_features = self.n_units
-        
-        att_linear = nn.Linear(n_input_features, 1)
-        att_linear.weight.data.normal_(0.0, np.sqrt(1 / np.prod(att_linear.weight.shape)))
-        fc_attention.append(att_linear)
-        self.attention_nn = torch.nn.Sequential(*fc_attention)
+        self.pre_attention_nn = nn.Sequential(*fc_layers)
+
+        # Multi-head Attention Layer
+        self.attention = nn.MultiheadAttention(embed_dim=n_units, num_heads=n_heads, batch_first=True)
+
+        # Final Linear layer to reduce multiple heads back to a single weight per sequence
+        self.output_layer = nn.Linear(n_units, 1)
+
     
     def forward(self, inputs):
         """Apply single-head attention network.
@@ -188,7 +195,12 @@ class AttentionNetwork(nn.Module):
         attention_weights: torch.Tensor
             Attention weights for sequences as tensor of shape (n_sequences, 1)
         """
-        attention_weights = self.attention_nn(inputs)
+        # Pass through the fully connected layers
+        x = self.pre_attention_nn(inputs)  
+        # Apply Multi-Head Attention
+        attn_output, _ = self.attention(x, x, x)  
+        # Reduce multi-head output to a single attention score
+        attention_weights = self.output_layer(attn_output)  
         return attention_weights
 
 
