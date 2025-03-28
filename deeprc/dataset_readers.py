@@ -260,7 +260,9 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
 
 
 def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: str, repertoiresdata_path: str,
-                                stratify=False, n_splits=5, rnd_seed=0, batch_size=4, **kwargs):
+                                stratify=False, n_splits=5, rnd_seed=0,
+                                n_worker_processes=4, batch_size=4,
+                                ask_for_input = False, **kwargs):
     """
     Generate data loaders for multiple tasks, ensuring stratified splitting for all targets.
 
@@ -315,7 +317,9 @@ def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: 
             repertoiresdata_path=repertoiresdata_path,
             n_splits=n_splits,
             rnd_seed=rnd_seed,
+            n_worker_processes=n_worker_processes,
             batch_size=batch_size,
+            ask_for_input=ask_for_input,
             **kwargs
         )
 
@@ -324,10 +328,11 @@ def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: 
         task_definition=task_definition,
         metadata_file=metadata_file,
         repertoiresdata_path=repertoiresdata_path,
-        split_inds=split_inds,
         n_splits=n_splits,
         rnd_seed=rnd_seed,
+        n_worker_processes=n_worker_processes,
         batch_size=batch_size,
+        ask_for_input=ask_for_input,
         **kwargs
     )
 
