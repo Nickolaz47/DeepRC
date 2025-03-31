@@ -553,7 +553,7 @@ class RepertoireDataset(Dataset):
         return char_array
 
     def __len__(self):
-        return self.n_samples
+        return len(self.sample_keys)
 
     def __getitem__(self, idx, sample_n_sequences: Union[None, int] = None):
         """ Return repertoire with index idx from dataset, randomly sub-/up-sampled to `sample_n_sequences` sequences
