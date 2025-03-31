@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Reading repertoire datasets from hdf5 containers.
+Reading repertoire datasets from hdf5 containers!
 
 See `deeprc/datasets/README.md` for information on supported dataset formats for custom datasets.
 See `deeprc/examples/` for examples.
