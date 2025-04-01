@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Reading repertoire datasets from hdf5 containers!
+Reading repertoire datasets from hdf5 containers.
 
 See `deeprc/datasets/README.md` for information on supported dataset formats for custom datasets.
 See `deeprc/examples/` for examples.
@@ -419,7 +419,7 @@ class RepertoireDataset(Dataset):
         self.metadata.index = self.metadata[self.sample_id_column].values
         self.sample_keys = np.array(
             [os.path.splitext(k)[0] for k in self.metadata[self.sample_id_column].values])
-        self.n_samples = len(self.sample_keys)
+        self.n_samples_table = len(self.sample_keys)
         self.target_features = self.task_definition.get_targets(self.metadata)
 
         # Read sequence data from hdf5 file
@@ -430,7 +430,7 @@ class RepertoireDataset(Dataset):
             self.aas += ''.join(['<', '>', '^'])
             self.n_features = len(self.aas)
             self.stats = str_or_byte_to_str(metadata['stats'][()])
-            self.n_samples = metadata['n_samples'][()]
+            self.n_samples_container = metadata['n_samples'][()]
             hdf5_sample_keys = [str_or_byte_to_str(
                 os.path.splitext(k)[0]) for k in metadata['sample_keys'][:]]
 
@@ -480,7 +480,7 @@ class RepertoireDataset(Dataset):
 
         self._vprint("File Stats:")
         self._vprint("  " + "  \n".join(self.stats.split('; ')))
-        self._vprint(f"Used samples: {self.n_samples}")
+        self._vprint(f"Used samples: {self.n_samples_table}")
 
     def get_sample(self, idx: int, sample_n_sequences: Union[None, int] = None):
         """ Return repertoire with index idx from dataset, randomly sub-/up-sampled to `sample_n_sequences` sequences
@@ -553,7 +553,7 @@ class RepertoireDataset(Dataset):
         return char_array
 
     def __len__(self):
-        return self.n_samples
+        return self.n_samples_table
 
     def __getitem__(self, idx, sample_n_sequences: Union[None, int] = None):
         """ Return repertoire with index idx from dataset, randomly sub-/up-sampled to `sample_n_sequences` sequences
