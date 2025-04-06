@@ -328,6 +328,7 @@ def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: 
         task_definition=task_definition,
         metadata_file=metadata_file,
         repertoiresdata_path=repertoiresdata_path,
+        split_inds=split_inds,
         n_splits=n_splits,
         rnd_seed=rnd_seed,
         n_worker_processes=n_worker_processes,
