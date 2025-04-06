@@ -204,6 +204,7 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
     if split_inds is None:
         if verbose:
             print("Computing random split indices")
+        n_repertoires = len(full_dataset)
         n_repertoires_per_split = int(n_repertoires / n_splits)
         rnd_gen = np.random.RandomState(rnd_seed)
         shuffled_repertoire_inds = rnd_gen.permutation(n_repertoires)
