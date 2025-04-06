@@ -418,6 +418,8 @@ class DeepRC(nn.Module):
             where `n_reduced_sequences=n_sequences*network_config['sequence_reduction_fraction']`
         mb_n_sequences: torch.Tensor
             Number of sequences per bag as tensor of dtype torch.long and shape (n_samples,)
+        used_sequence_inds: torch.Tensor
+            Indices from used sequences in each bag as tensor of dype torch.long and shape (n_reduced_sequences,)
         """
         with torch.no_grad():
             # Move tensors to device
@@ -601,6 +603,8 @@ class DeepRC(nn.Module):
         reduced_sequence_lengths: torch.Tensor
             Sequences lengths of `reduced_inputs` as tensor of dtype torch.long and shape (n_reduced_sequences,),
             where `n_reduced_sequences=n_sequences*sequence_reduction_fraction`
+        used_sequences: torch.Tensor
+            Indices from reduced_inputs
         """
         if self.sequence_reduction_fraction <= 1.0:
             # Get number of sequences to reduce to
