@@ -439,7 +439,7 @@ class DeepRC(nn.Module):
             ]
 
             # Reduce number of sequences (apply __reduce_sequences_for_bag__ separately to all bags in mb)
-            reduced_inputs, reduced_sequence_lengths = list(
+            reduced_inputs, reduced_sequence_lengths, used_sequence_inds = list(
                 zip(
                     *[
                         self.__reduce_sequences_for_bag__(inp, sequence_lengths)
@@ -463,6 +463,7 @@ class DeepRC(nn.Module):
             mb_reduced_inputs,
             mb_reduced_sequence_lengths,
             mb_n_sequences,
+            used_sequence_inds
         )
 
     def forward(self, inputs_flat, sequence_lengths_flat, n_sequences_per_bag):
@@ -656,5 +657,6 @@ class DeepRC(nn.Module):
                 reduced_sequence_lengths = sequence_lengths.detach().to(
                     device=self.device, dtype=self.embedding_dtype
                 )
+                used_sequences = np.arange(len(inputs))
 
-        return reduced_inputs, reduced_sequence_lengths
+        return reduced_inputs, reduced_sequence_lengths, used_sequences

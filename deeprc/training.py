@@ -189,7 +189,7 @@ def train(model: torch.nn.Module, task_definition: TaskDefinition, early_stoppin
                     
                     # Apply attention-based sequence reduction and create minibatch
                     with torch.no_grad():
-                        labels, inputs, sequence_lengths, n_sequences = model.reduce_and_stack_minibatch(
+                        labels, inputs, sequence_lengths, n_sequences, _ = model.reduce_and_stack_minibatch(
                                 labels, inputs, sequence_lengths, counts_per_sequence)
                     
                     # Reset gradients
