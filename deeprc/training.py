@@ -51,7 +51,7 @@ def evaluate(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, ta
             targets, inputs, sequence_lengths, counts_per_sequence, sample_ids = scoring_data
             
             # Apply attention-based sequence reduction and create minibatch
-            targets, inputs, sequence_lengths, n_sequences = model.reduce_and_stack_minibatch(
+            targets, inputs, sequence_lengths, n_sequences, _ = model.reduce_and_stack_minibatch(
                     targets, inputs, sequence_lengths, counts_per_sequence)
             
             # Compute predictions from reduced sequences
