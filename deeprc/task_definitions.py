@@ -235,8 +235,10 @@ class BinaryTarget(Target):
         bacc = metrics.balanced_accuracy_score(y_true=labels, y_pred=predictions_thresholded)
         f1 = metrics.f1_score(y_true=labels, y_pred=predictions_thresholded, average='binary',
                               pos_label=1)
+        mcc = metrics.matthews_corrcoef(y_true=labels, y_pred=predictions_thresholded)
         loss = self.loss_function(raw_outputs=raw_outputs, targets=targets).detach().mean().cpu().item()
-        return dict(roc_auc=float(roc_auc), bacc=float(bacc), f1=float(f1), loss=loss)
+        
+        return dict(roc_auc=float(roc_auc), bacc=float(bacc), f1=float(f1), mcc=float(mcc), loss=loss)
 
 
 class MulticlassTarget(Target):
