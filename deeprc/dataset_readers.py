@@ -260,7 +260,8 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
 
 
 def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: str, repertoiresdata_path: str,
-                                stratify=False, n_splits=5, rnd_seed=0, **kwargs):
+                                stratify=False, n_splits=5, rnd_seed=0, min_orf_len=None,
+                                max_orf_len=None, **kwargs):
     """
     Generate data loaders for multiple tasks, ensuring stratified splitting for all targets.
 
@@ -278,6 +279,10 @@ def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: 
         Number of splits for cross-validation. Default is 5.
     rnd_seed : int, optional
         Seed for reproducibility of splits. Default is 0.
+    min_orf_len: int, optional
+        Minimum ORF length to include (amino acids)
+    max_orf_len: int, optional
+        Maximum ORF length to include (amino acids)
     kwargs : dict
         Additional arguments passed to the original `make_dataloaders` function.
 
@@ -286,6 +291,9 @@ def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: 
     tuple
         DataLoaders for training, training evaluation, validation, and testing datasets.
     """
+    
+
+
     if stratify:
         print("Performing stratified splitting for multiple tasks...")
         metadata = pd.read_csv(metadata_file, sep='\t')
