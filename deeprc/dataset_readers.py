@@ -14,6 +14,7 @@ import h5py
 import pandas as pd
 from typing import Tuple, Callable, Union
 import torch
+from deeprc.utils import filter_orfs_by_length
 from torch.utils.data import Dataset, DataLoader
 from deeprc.dataset_converters import DatasetToHDF5
 from deeprc.task_definitions import TaskDefinition
@@ -291,51 +292,63 @@ def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: 
     tuple
         DataLoaders for training, training evaluation, validation, and testing datasets.
     """
-    
+    temp_filtered_file = None
+    try:
+        if min_orf_len is not None and max_orf_len is not None:
+            temp_filtered_file = filter_orfs_by_length(
+                repertoiresdata_path,
+                min_orf_len,
+                max_orf_len)
+            repertoiresdata_path = temp_filtered_file
+        
+        if stratify:
+            print("Performing stratified splitting for multiple tasks...")
+            metadata = pd.read_csv(metadata_file, sep='\t')
 
+            combined_labels = metadata[[
+                target.column_name for target in task_definition.__targets__]].agg(tuple, axis=1)
+            # Convert combined_labels to a single string per row to represent unique combinations
+            combined_labels = combined_labels.apply(
+                lambda x: "_".join(map(str, x)))
 
-    if stratify:
-        print("Performing stratified splitting for multiple tasks...")
-        metadata = pd.read_csv(metadata_file, sep='\t')
+            # Ensure StratifiedKFold gets a single 1D array of labels
+            skf = StratifiedKFold(
+                n_splits=n_splits, shuffle=True, random_state=rnd_seed)
 
-        combined_labels = metadata[[
-            target.column_name for target in task_definition.__targets__]].agg(tuple, axis=1)
-        # Convert combined_labels to a single string per row to represent unique combinations
-        combined_labels = combined_labels.apply(
-            lambda x: "_".join(map(str, x)))
+            # Debugging: Check unique label combinations
+            print(f"Processed label combinations: {combined_labels.unique()}")
 
-        # Ensure StratifiedKFold gets a single 1D array of labels
-        skf = StratifiedKFold(
-            n_splits=n_splits, shuffle=True, random_state=rnd_seed)
+            # Perform stratified splitting
+            split_inds = []
+            for _, test_index in skf.split(X=np.zeros(len(combined_labels)), y=combined_labels):
+                split_inds.append(test_index)
 
-        # Debugging: Check unique label combinations
-        print(f"Processed label combinations: {combined_labels.unique()}")
-
-        # Perform stratified splitting
-        split_inds = []
-        for _, test_index in skf.split(X=np.zeros(len(combined_labels)), y=combined_labels):
-            split_inds.append(test_index)
-    else:
-        print("Skipping stratified splitting, using default splitting.")
-        return make_dataloaders(
-            task_definition=task_definition,
-            metadata_file=metadata_file,
-            repertoiresdata_path=repertoiresdata_path,
-            n_splits=n_splits,
-            rnd_seed=rnd_seed,
-            **kwargs
-        )
-
-    # Pass stratified indices to make_dataloaders
-    return make_dataloaders(
-        task_definition=task_definition,
-        metadata_file=metadata_file,
-        repertoiresdata_path=repertoiresdata_path,
-        split_inds=split_inds,
-        n_splits=n_splits,
-        rnd_seed=rnd_seed,
-        **kwargs
-    )
+            # Pass stratified indices to make_dataloaders
+            return make_dataloaders(
+                task_definition=task_definition,
+                metadata_file=metadata_file,
+                repertoiresdata_path=repertoiresdata_path,
+                split_inds=split_inds,
+                n_splits=n_splits,
+                rnd_seed=rnd_seed,
+                **kwargs
+            )
+        else:
+            print("Skipping stratified splitting, using default splitting.")
+            return make_dataloaders(
+                task_definition=task_definition,
+                metadata_file=metadata_file,
+                repertoiresdata_path=repertoiresdata_path,
+                n_splits=n_splits,
+                rnd_seed=rnd_seed,
+                **kwargs
+            )
+    finally:
+        if temp_filtered_file is not None and os.path.exists(temp_filtered_file):
+            try:
+                os.remove(temp_filtered_file)
+            except:
+                pass
 
 
 def no_stack_collate_fn(batch_as_list: list):
