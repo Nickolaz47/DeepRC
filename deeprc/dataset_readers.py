@@ -291,9 +291,6 @@ def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: 
     tuple
         DataLoaders for training, training evaluation, validation, and testing datasets.
     """
-    
-
-
     if stratify:
         print("Performing stratified splitting for multiple tasks...")
         metadata = pd.read_csv(metadata_file, sep='\t')

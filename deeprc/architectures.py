@@ -30,7 +30,7 @@ def compute_position_features(max_seq_len, sequence_lengths, dtype=np.float16):
 
 
 class SequenceEmbeddingCNN(nn.Module):
-    def __init__(self, n_input_features: int, kernel_size: int = 9, n_kernels: int = 32, n_layers: int = 1):
+    def __init__(self, n_input_features: int, kernel_size: int = 9, n_kernels: int = 32, n_layers: int = 1, dropout_rate:float=0.0):
         """Sequence embedding using 1D-CNN (`h()` in paper)
         
         See `deeprc/examples/` for examples.
@@ -45,11 +45,14 @@ class SequenceEmbeddingCNN(nn.Module):
             Number of 1D-CNN kernels in each layer
         n_layers : int
             Number of 1D-CNN layers
+        dropout_rate: float
+            Dropout probability for regularization (only used between hidden layers)
         """
         super(SequenceEmbeddingCNN, self).__init__()
         self.kernel_size = kernel_size
         self.n_kernels = n_kernels
         self.n_layers = n_layers
+        self.dropout_rate = dropout_rate
         
         if self.n_layers <= 0:
             raise ValueError(f"Number of layers n_layers must be > 0 but is {self.n_layers}")
@@ -62,6 +65,8 @@ class SequenceEmbeddingCNN(nn.Module):
             conv.weight.data.normal_(0.0, np.sqrt(1 / np.prod(conv.weight.shape)))
             network.append(conv)
             network.append(nn.SELU(inplace=True))
+            if self.dropout_rate > 0.0:
+                network.append(nn.AlphaDropout(p=self.dropout_rate))
             n_input_features = self.n_kernels
         
         self.network = torch.nn.Sequential(*network)
@@ -143,7 +148,7 @@ class SequenceEmbeddingLSTM(nn.Module):
 
 
 class AttentionNetwork(nn.Module):
-    def __init__(self, n_input_features: int, n_layers: int = 2, n_units: int = 32):
+    def __init__(self, n_input_features: int, n_layers: int = 2, n_units: int = 32, dropout_rate:float=0.0):
         """Attention network (`f()` in paper) as fully connected network.
          Currently only implemented for 1 attention head and query.
         
@@ -157,10 +162,13 @@ class AttentionNetwork(nn.Module):
             Number of attention layers to compute keys
         n_units : int
             Number of units in each attention layer
+        dropout_rate: float
+            Dropout probability for regularization (only used between hidden layers)
         """
         super(AttentionNetwork, self).__init__()
         self.n_attention_layers = n_layers
         self.n_units = n_units
+        self.dropout_rate = dropout_rate
         
         fc_attention = []
         for _ in range(self.n_attention_layers):
@@ -168,6 +176,8 @@ class AttentionNetwork(nn.Module):
             att_linear.weight.data.normal_(0.0, np.sqrt(1 / np.prod(att_linear.weight.shape)))
             fc_attention.append(att_linear)
             fc_attention.append(nn.SELU())
+            if self.dropout_rate > 0.0:
+                fc_attention.append(nn.AlphaDropout(p=self.dropout_rate))
             n_input_features = self.n_units
         
         att_linear = nn.Linear(n_input_features, 1)
@@ -193,7 +203,8 @@ class AttentionNetwork(nn.Module):
 
 
 class OutputNetwork(nn.Module):
-    def __init__(self, n_input_features: int, n_output_features: int = 1, n_layers: int = 1, n_units: int = 32):
+    def __init__(self, n_input_features: int, n_output_features: int = 1, n_layers: int = 1, n_units: int = 32,
+                 dropout_rate:float=0.0):
         """Output network (`o()` in paper) as fully connected network
         
         See `deeprc/examples/` for examples.
@@ -208,10 +219,13 @@ class OutputNetwork(nn.Module):
             Number of layers in output network (in addition to final output layer)
         n_units : int
             Number of units in each attention layer
+        dropout_rate: float
+            Dropout probability for regularization (only used between hidden layers)
         """
         super(OutputNetwork, self).__init__()
         self.n_layers = n_layers
         self.n_units = n_units
+        self.dropout_rate = dropout_rate
         
         output_network = []
         for _ in range(self.n_layers-1):
@@ -219,6 +233,8 @@ class OutputNetwork(nn.Module):
             o_linear.weight.data.normal_(0.0, np.sqrt(1 / np.prod(o_linear.weight.shape)))
             output_network.append(o_linear)
             output_network.append(nn.SELU())
+            if self.dropout_rate > 0.0:
+                output_network.append(nn.AlphaDropout(p=self.dropout_rate))
             n_input_features = self.n_units
         
         o_linear = nn.Linear(n_input_features, n_output_features)
