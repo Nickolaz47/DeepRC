@@ -35,17 +35,7 @@ def compute_position_features(max_seq_len, sequence_lengths, dtype=np.float16):
 
 
 class SequenceEmbeddingCNN(nn.Module):
-<<<<<<< master
-    def __init__(
-        self,
-        n_input_features: int,
-        kernel_size: int = 9,
-        n_kernels: int = 32,
-        n_layers: int = 1,
-    ):
-=======
     def __init__(self, n_input_features: int, kernel_size: int = 9, n_kernels: int = 32, n_layers: int = 1, dropout_rate:float=0.0):
->>>>>>> master
         """Sequence embedding using 1D-CNN (`h()` in paper)
 
         See `deeprc/examples/` for examples.
@@ -67,12 +57,8 @@ class SequenceEmbeddingCNN(nn.Module):
         self.kernel_size = kernel_size
         self.n_kernels = n_kernels
         self.n_layers = n_layers
-<<<<<<< master
-
-=======
         self.dropout_rate = dropout_rate
         
->>>>>>> master
         if self.n_layers <= 0:
             raise ValueError(
                 f"Number of layers n_layers must be > 0 but is {self.n_layers}"
@@ -207,12 +193,8 @@ class AttentionNetwork(nn.Module):
         super(AttentionNetwork, self).__init__()
         self.n_attention_layers = n_layers
         self.n_units = n_units
-<<<<<<< master
-
-=======
         self.dropout_rate = dropout_rate
         
->>>>>>> master
         fc_attention = []
         for _ in range(self.n_attention_layers):
             att_linear = nn.Linear(n_input_features, self.n_units)
@@ -250,18 +232,8 @@ class AttentionNetwork(nn.Module):
 
 
 class OutputNetwork(nn.Module):
-<<<<<<< master
-    def __init__(
-        self,
-        n_input_features: int,
-        n_output_features: int = 1,
-        n_layers: int = 1,
-        n_units: int = 32,
-    ):
-=======
     def __init__(self, n_input_features: int, n_output_features: int = 1, n_layers: int = 1, n_units: int = 32,
                  dropout_rate:float=0.0):
->>>>>>> master
         """Output network (`o()` in paper) as fully connected network
 
         See `deeprc/examples/` for examples.
@@ -282,12 +254,8 @@ class OutputNetwork(nn.Module):
         super(OutputNetwork, self).__init__()
         self.n_layers = n_layers
         self.n_units = n_units
-<<<<<<< master
-
-=======
         self.dropout_rate = dropout_rate
         
->>>>>>> master
         output_network = []
         for _ in range(self.n_layers - 1):
             o_linear = nn.Linear(n_input_features, self.n_units)
