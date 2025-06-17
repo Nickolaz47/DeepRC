@@ -204,6 +204,7 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
     if split_inds is None:
         if verbose:
             print("Computing random split indices")
+        n_repertoires = len(full_dataset)
         n_repertoires_per_split = int(n_repertoires / n_splits)
         rnd_gen = np.random.RandomState(rnd_seed)
         shuffled_repertoire_inds = rnd_gen.permutation(n_repertoires)
@@ -260,8 +261,9 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
 
 
 def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: str, repertoiresdata_path: str,
-                                stratify=False, n_splits=5, rnd_seed=0, min_orf_len=None,
-                                max_orf_len=None, **kwargs):
+                                stratify=False, n_splits=5, rnd_seed=0,
+                                n_worker_processes=4, batch_size=4,
+                                ask_for_input = False, **kwargs):
     """
     Generate data loaders for multiple tasks, ensuring stratified splitting for all targets.
 
@@ -279,10 +281,6 @@ def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: 
         Number of splits for cross-validation. Default is 5.
     rnd_seed : int, optional
         Seed for reproducibility of splits. Default is 0.
-    min_orf_len: int, optional
-        Minimum ORF length to include (amino acids)
-    max_orf_len: int, optional
-        Maximum ORF length to include (amino acids)
     kwargs : dict
         Additional arguments passed to the original `make_dataloaders` function.
 
@@ -320,6 +318,9 @@ def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: 
             repertoiresdata_path=repertoiresdata_path,
             n_splits=n_splits,
             rnd_seed=rnd_seed,
+            n_worker_processes=n_worker_processes,
+            batch_size=batch_size,
+            ask_for_input=ask_for_input,
             **kwargs
         )
 
@@ -331,6 +332,9 @@ def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: 
         split_inds=split_inds,
         n_splits=n_splits,
         rnd_seed=rnd_seed,
+        n_worker_processes=n_worker_processes,
+        batch_size=batch_size,
+        ask_for_input=ask_for_input,
         **kwargs
     )
 
@@ -417,7 +421,7 @@ class RepertoireDataset(Dataset):
         self.metadata.index = self.metadata[self.sample_id_column].values
         self.sample_keys = np.array(
             [os.path.splitext(k)[0] for k in self.metadata[self.sample_id_column].values])
-        self.n_samples = len(self.sample_keys)
+        self.n_samples_table = len(self.sample_keys)
         self.target_features = self.task_definition.get_targets(self.metadata)
 
         # Read sequence data from hdf5 file
@@ -428,7 +432,7 @@ class RepertoireDataset(Dataset):
             self.aas += ''.join(['<', '>', '^'])
             self.n_features = len(self.aas)
             self.stats = str_or_byte_to_str(metadata['stats'][()])
-            self.n_samples = metadata['n_samples'][()]
+            self.n_samples_container = metadata['n_samples'][()]
             hdf5_sample_keys = [str_or_byte_to_str(
                 os.path.splitext(k)[0]) for k in metadata['sample_keys'][:]]
 
@@ -478,7 +482,7 @@ class RepertoireDataset(Dataset):
 
         self._vprint("File Stats:")
         self._vprint("  " + "  \n".join(self.stats.split('; ')))
-        self._vprint(f"Used samples: {self.n_samples}")
+        self._vprint(f"Used samples: {self.n_samples_table}")
 
     def get_sample(self, idx: int, sample_n_sequences: Union[None, int] = None):
         """ Return repertoire with index idx from dataset, randomly sub-/up-sampled to `sample_n_sequences` sequences
@@ -551,7 +555,7 @@ class RepertoireDataset(Dataset):
         return char_array
 
     def __len__(self):
-        return self.n_samples
+        return self.n_samples_table
 
     def __getitem__(self, idx, sample_n_sequences: Union[None, int] = None):
         """ Return repertoire with index idx from dataset, randomly sub-/up-sampled to `sample_n_sequences` sequences
