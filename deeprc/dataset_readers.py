@@ -261,7 +261,7 @@ def make_dataloaders(task_definition: TaskDefinition, metadata_file: str, repert
 
 
 def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: str, repertoiresdata_path: str,
-                                stratify=False, n_splits=5, rnd_seed=0,
+                                split_column_name: str, stratify=False, n_splits=5, rnd_seed=0, 
                                 n_worker_processes=4, batch_size=4,
                                 ask_for_input = False, **kwargs):
     """
@@ -275,6 +275,8 @@ def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: 
         Path to the metadata file (.tsv) containing sample labels.
     repertoiresdata_path : str
         Path to the dataset containing repertoire data or the hdf5 file.
+    split_column_name: str
+        Column name for splitting data into folds.
     stratify : bool, optional
         Whether to perform stratified splitting based on combined sample classes. Default is False.
     n_splits : int, optional
@@ -293,12 +295,14 @@ def make_dataloaders_stratified(task_definition: TaskDefinition, metadata_file: 
         print("Performing stratified splitting for multiple tasks...")
         metadata = pd.read_csv(metadata_file, sep='\t')
 
-        combined_labels = metadata[[
-            target.column_name for target in task_definition.__targets__]].agg(tuple, axis=1)
+        if split_column_name not in metadata.columns:
+            raise ValueError(f"Column '{split_column_name}' not found in metadata file.")
+
+        combined_labels = metadata[[split_column_name]].agg(tuple, axis=1)
         # Convert combined_labels to a single string per row to represent unique combinations
         combined_labels = combined_labels.apply(
             lambda x: "_".join(map(str, x)))
-
+        
         # Ensure StratifiedKFold gets a single 1D array of labels
         skf = StratifiedKFold(
             n_splits=n_splits, shuffle=True, random_state=rnd_seed)
