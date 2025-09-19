@@ -152,7 +152,7 @@ class SequenceEmbeddingLSTM(nn.Module):
         self.network = torch.nn.Sequential(*network)
 
     def forward(self, inputs, sequence_lengths, *args, **kwargs):
-        """Apply sequence embedding LSTM network to inputs in NLC format.
+        """Apply sequence embedding LSTM network to inputs in NLC format with clamped indices to avoid CUDA OOB.
 
         Parameters
         ----------
@@ -161,17 +161,20 @@ class SequenceEmbeddingLSTM(nn.Module):
 
         Returns
         ---------
-        max_conv_acts: torch.Tensor
-            Sequences embedded to tensor of shape (n_sequences, n_kernels)
+        output: torch.Tensor
+            Sequences embedded to tensor of shape (n_sequences, n_lstm_blocks)
         """
         inputs = torch.transpose(inputs, 0, 1)  # NLC -> LNC
         output, (hn, cn) = self.network(inputs)
-        output = output[
-            sequence_lengths.long() - 1, torch.arange(output.shape[1], dtype=torch.long)
-        ]
+
+        # Clamp sequence_lengths to valid range [1, max_seq_len]
+        max_len = output.shape[0]
+        clamped_lengths = sequence_lengths.long().clamp(min=1, max=max_len)
+
+        # Gather last valid hidden states for each sequence
+        output = output[clamped_lengths - 1, torch.arange(output.shape[1], dtype=torch.long, device=output.device)]
         return output
-
-
+    
 class AttentionNetwork(nn.Module):
     def __init__(self, n_input_features: int, n_layers: int = 2, n_units: int = 32, dropout_rate:float=0.0):
         """Attention network (`f()` in paper) as fully connected network.
