@@ -442,7 +442,7 @@ class RepertoireDataset(Dataset):
 
             # Mapping metadata sample indices -> hdf5 file sample indices
             unfound_samples = np.array(
-                [sk not in hdf5_sample_keys for sk in self.sample_keys], dtype=np.bool)
+                [sk not in hdf5_sample_keys for sk in self.sample_keys], dtype=bool)
             if np.any(unfound_samples):
                 raise KeyError(f"Samples {self.sample_keys[unfound_samples]} "
                                f"could not be found in hdf5 file. Please add the samples and re-create the hdf5 file "
