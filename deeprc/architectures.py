@@ -20,14 +20,16 @@ def compute_position_features(max_seq_len, sequence_lengths, dtype=np.float16):
     `max_seq_len`.
     """
     sequences = np.zeros((max_seq_len + 1, max_seq_len, 3), dtype=dtype)
-    half_sequence_lengths = np.asarray(np.ceil(sequence_lengths / 2.0), dtype=np.int64)
+    half_sequence_lengths = np.asarray(
+        np.ceil(sequence_lengths / 2.0), dtype=np.int64)
     for i in range(len(sequences)):
         sequence, seq_len, half_seq_len = (
             sequences[i],
             sequence_lengths[i],
             half_sequence_lengths[i],
         )
-        sequence[:seq_len, -1] = np.abs(0.5 - np.linspace(1.0, 0, num=seq_len)) * 2.0
+        sequence[:seq_len, -1] = np.abs(0.5 -
+                                        np.linspace(1.0, 0, num=seq_len)) * 2.0
         sequence[:half_seq_len, -3] = sequence[:half_seq_len, -1]
         sequence[half_seq_len:seq_len, -2] = sequence[half_seq_len:seq_len, -1]
         sequence[:seq_len, -1] = 1.0 - sequence[:seq_len, -1]
@@ -35,7 +37,7 @@ def compute_position_features(max_seq_len, sequence_lengths, dtype=np.float16):
 
 
 class SequenceEmbeddingCNN(nn.Module):
-    def __init__(self, n_input_features: int, kernel_size: int = 9, n_kernels: int = 32, n_layers: int = 1, dropout_rate:float=0.0):
+    def __init__(self, n_input_features: int, kernel_size: int = 9, n_kernels: int = 32, n_layers: int = 1, dropout_rate: float = 0.0):
         """Sequence embedding using 1D-CNN (`h()` in paper)
 
         See `deeprc/examples/` for examples.
@@ -58,7 +60,7 @@ class SequenceEmbeddingCNN(nn.Module):
         self.n_kernels = n_kernels
         self.n_layers = n_layers
         self.dropout_rate = dropout_rate
-        
+
         if self.n_layers <= 0:
             raise ValueError(
                 f"Number of layers n_layers must be > 0 but is {self.n_layers}"
@@ -73,7 +75,8 @@ class SequenceEmbeddingCNN(nn.Module):
                 kernel_size=self.kernel_size,
                 bias=True,
             )
-            conv.weight.data.normal_(0.0, np.sqrt(1 / np.prod(conv.weight.shape)))
+            conv.weight.data.normal_(0.0, np.sqrt(
+                1 / np.prod(conv.weight.shape)))
             network.append(conv)
             network.append(nn.SELU(inplace=True))
             if self.dropout_rate > 0.0:
@@ -172,11 +175,220 @@ class SequenceEmbeddingLSTM(nn.Module):
         clamped_lengths = sequence_lengths.long().clamp(min=1, max=max_len)
 
         # Gather last valid hidden states for each sequence
-        output = output[clamped_lengths - 1, torch.arange(output.shape[1], dtype=torch.long, device=output.device)]
+        output = output[clamped_lengths - 1,
+                        torch.arange(output.shape[1], dtype=torch.long, device=output.device)]
         return output
-    
+
+
+class SequenceEmbeddingCNNEnhanced(nn.Module):
+    """
+    Enhanced multi-scale CNN sequence embedding module.
+
+    Parameters
+    ----------
+    n_input_features : int
+        Number of input features per sequence position.
+    n_kernels : int
+        Number of convolutional kernels per scale.
+    kernel_sizes : List[int]
+        List of kernel sizes used in the multi-scale branches.
+    n_conv_blocks : int
+        Number of convolutional blocks per scale.
+    dropout_rate : float
+        Dropout probability applied after convolutional blocks.
+    use_residual : bool
+        Whether to include residual skip connections between convolutional
+        blocks.
+    use_squeeze_excitation : bool
+        Whether to apply Squeeze-and-Excitation channel attention.
+    use_depthwise_separable : bool
+        Whether to use depthwise separable convolutions instead of standard
+        convolutions.
+    pooling_method : str
+        Global pooling method: "max", "avg", or "both".
+    """
+
+    def __init__(
+        self,
+        n_input_features: int = 23,
+        n_kernels: int = 32,
+        kernel_sizes: List[int] = [3, 5, 9, 15],
+        n_conv_blocks: int = 3,
+        dropout_rate: float = 0.0,
+        use_residual: bool = True,
+        use_squeeze_excitation: bool = True,
+        use_depthwise_separable: bool = False,
+        pooling_method: str = "max",
+        **kwargs
+    ):
+        super().__init__()
+
+        self.n_kernels = n_kernels
+        self.kernel_sizes = kernel_sizes
+        self.n_conv_blocks = n_conv_blocks
+        self.dropout_rate = dropout_rate
+        self.use_residual = use_residual
+        self.use_squeeze_excitation = use_squeeze_excitation
+        self.use_depthwise_separable = use_depthwise_separable
+        self.pooling_method = pooling_method
+
+        # Multi-scale convolution branches
+        self.scale_branches = nn.ModuleList()
+
+        for k_size in kernel_sizes:
+            branch = self._create_conv_branch(
+                n_input_features=n_input_features,
+                n_kernels=n_kernels,
+                kernel_size=k_size,
+                n_blocks=n_conv_blocks
+            )
+            self.scale_branches.append(branch)
+
+        # Output dimension after pooling and concatenation
+        n_scales = len(kernel_sizes)
+        if pooling_method == "both":
+            self.output_dim = n_kernels * n_scales * 2
+        else:
+            self.output_dim = n_kernels * n_scales
+
+    def _create_conv_branch(self, n_input_features, n_kernels, kernel_size,
+                            n_blocks):
+        """Create a convolutional branch composed of `n_blocks` convolution
+        blocks."""
+
+        blocks = []
+        in_channels = n_input_features
+
+        for block_idx in range(n_blocks):
+            block = self._create_conv_block(
+                in_channels=in_channels,
+                out_channels=n_kernels,
+                kernel_size=kernel_size,
+                use_residual=self.use_residual and block_idx > 0,
+                use_se=self.use_squeeze_excitation
+            )
+            blocks.append(block)
+            in_channels = n_kernels
+
+        return nn.Sequential(*blocks)
+
+    def _create_conv_block(self, in_channels, out_channels,
+                           kernel_size, use_residual, use_se):
+        """Create a single convolutional block with optional SE attention and
+        residual connection."""
+
+        # Depthwise-separable or standard convolution
+        if self.use_depthwise_separable:
+            conv = nn.Sequential(
+                nn.Conv1d(in_channels, in_channels, kernel_size,
+                          padding=kernel_size // 2, groups=in_channels,
+                          bias=False),
+                nn.BatchNorm1d(in_channels),
+                nn.SELU(inplace=True),
+                nn.Conv1d(in_channels, out_channels, kernel_size=1, bias=False)
+            )
+        else:
+            conv = nn.Conv1d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                padding=kernel_size // 2,
+                bias=False
+            )
+            nn.init.kaiming_normal_(conv.weight, mode="fan_in",
+                                    nonlinearity="linear")
+
+        layers = [conv, nn.BatchNorm1d(out_channels), nn.SELU(inplace=True)]
+
+        if use_se:
+            layers.append(SqueezeExcitation(out_channels, reduction=4))
+
+        if self.dropout_rate > 0:
+            layers.append(nn.AlphaDropout(self.dropout_rate))
+
+        block = nn.Sequential(*layers)
+
+        if use_residual and in_channels == out_channels:
+            return ResidualBlock(block)
+
+        return block
+
+    def forward(self, inputs, *args, **kwargs):
+        """
+        Apply enhanced multi-scale CNN sequence embedding.
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            Tensor of shape (batch_size, seq_len, n_features).
+
+        Returns
+        -------
+        output : torch.Tensor
+            Tensor of shape (batch_size, output_dim).
+        """
+        x = inputs.transpose(1, 2)
+
+        scale_outputs = []
+
+        for branch in self.scale_branches:
+            out = branch(x)
+
+            if self.pooling_method == "max":
+                pooled = out.max(dim=-1)[0]
+            elif self.pooling_method == "avg":
+                pooled = out.mean(dim=-1)
+            else:
+                max_pooled = out.max(dim=-1)[0]
+                avg_pooled = out.mean(dim=-1)
+                pooled = torch.cat([max_pooled, avg_pooled], dim=1)
+
+            scale_outputs.append(pooled)
+
+        return torch.cat(scale_outputs, dim=1)
+
+
+class ResidualBlock(nn.Module):
+    """Residual wrapper enabling skip connections for stable deep networks."""
+
+    def __init__(self, block):
+        super().__init__()
+        self.block = block
+
+    def forward(self, x):
+        return x + self.block(x)
+
+
+class SqueezeExcitation(nn.Module):
+    """
+    Squeeze-and-Excitation block (channel attention).
+
+    This mechanism reweights convolutional channels according to their
+    importance by using global context aggregated over the sequence length.
+
+    Reference:
+        Hu et al., "Squeeze-and-Excitation Networks", CVPR 2018.
+    """
+
+    def __init__(self, channels, reduction=4):
+        super().__init__()
+        self.squeeze = nn.AdaptiveAvgPool1d(1)
+        self.excitation = nn.Sequential(
+            nn.Linear(channels, channels // reduction, bias=False),
+            nn.SELU(inplace=True),
+            nn.Linear(channels // reduction, channels, bias=False),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        b, c, _ = x.size()
+        s = self.squeeze(x).view(b, c)
+        a = self.excitation(s).view(b, c, 1)
+        return x * a
+
+
 class AttentionNetwork(nn.Module):
-    def __init__(self, n_input_features: int, n_layers: int = 2, n_units: int = 32, dropout_rate:float=0.0):
+    def __init__(self, n_input_features: int, n_layers: int = 2, n_units: int = 32, dropout_rate: float = 0.0):
         """Attention network (`f()` in paper) as fully connected network.
          Currently only implemented for 1 attention head and query.
 
@@ -197,7 +409,7 @@ class AttentionNetwork(nn.Module):
         self.n_attention_layers = n_layers
         self.n_units = n_units
         self.dropout_rate = dropout_rate
-        
+
         fc_attention = []
         for _ in range(self.n_attention_layers):
             att_linear = nn.Linear(n_input_features, self.n_units)
@@ -236,7 +448,7 @@ class AttentionNetwork(nn.Module):
 
 class OutputNetwork(nn.Module):
     def __init__(self, n_input_features: int, n_output_features: int = 1, n_layers: int = 1, n_units: int = 32,
-                 dropout_rate:float=0.0):
+                 dropout_rate: float = 0.0):
         """Output network (`o()` in paper) as fully connected network
 
         See `deeprc/examples/` for examples.
@@ -258,7 +470,7 @@ class OutputNetwork(nn.Module):
         self.n_layers = n_layers
         self.n_units = n_units
         self.dropout_rate = dropout_rate
-        
+
         output_network = []
         for _ in range(self.n_layers - 1):
             o_linear = nn.Linear(n_input_features, self.n_units)
@@ -272,7 +484,8 @@ class OutputNetwork(nn.Module):
             n_input_features = self.n_units
 
         o_linear = nn.Linear(n_input_features, n_output_features)
-        o_linear.weight.data.normal_(0.0, np.sqrt(1 / np.prod(o_linear.weight.shape)))
+        o_linear.weight.data.normal_(0.0, np.sqrt(
+            1 / np.prod(o_linear.weight.shape)))
         output_network.append(o_linear)
         self.output_nn = torch.nn.Sequential(*output_network)
 
@@ -381,7 +594,8 @@ class DeepRC(nn.Module):
 
         # Pre-compute position features for all possible sequence lengths
         position_features = compute_position_features(
-            max_seq_len=max_seq_len, sequence_lengths=np.arange(max_seq_len + 1)
+            max_seq_len=max_seq_len, sequence_lengths=np.arange(
+                max_seq_len + 1)
         )
         self.position_features = (
             torch.from_numpy(position_features)
@@ -430,7 +644,8 @@ class DeepRC(nn.Module):
         """
         with torch.no_grad():
             # Move tensors to device
-            sequences_of_indices = [t.to(self.device) for t in sequences_of_indices]
+            sequences_of_indices = [t.to(self.device)
+                                    for t in sequences_of_indices]
             max_mb_seq_len = max(t.max() for t in sequence_lengths)
             sequence_lengths = [t.to(self.device) for t in sequence_lengths]
 
@@ -451,7 +666,8 @@ class DeepRC(nn.Module):
             reduced_inputs, reduced_sequence_lengths, used_sequence_inds = list(
                 zip(
                     *[
-                        self.__reduce_sequences_for_bag__(inp, sequence_lengths)
+                        self.__reduce_sequences_for_bag__(
+                            inp, sequence_lengths)
                         for inp, sequence_lengths in zip(inputs_list, sequence_lengths)
                     ]
                 )
@@ -459,7 +675,8 @@ class DeepRC(nn.Module):
 
             # Stack bags in minibatch to tensor
             mb_targets = torch.stack(targets, dim=0).to(device=self.device)
-            mb_reduced_sequence_lengths = torch.cat(reduced_sequence_lengths, dim=0)
+            mb_reduced_sequence_lengths = torch.cat(
+                reduced_sequence_lengths, dim=0)
             mb_reduced_inputs = torch.cat(reduced_inputs, dim=0)
             mb_n_sequences = torch.tensor(
                 [len(rsl) for rsl in reduced_sequence_lengths],
@@ -507,19 +724,21 @@ class DeepRC(nn.Module):
         start_i = 0
         for n_seqs in n_sequences_per_bag:
             # Get sequence embedding h() for single bag (shape: (n_sequences_per_bag, d_v))
-            attention_weights = mb_attention_weights[start_i : start_i + n_seqs]
+            attention_weights = mb_attention_weights[start_i: start_i + n_seqs]
             # Get attention weights for single bag (shape: (n_sequences_per_bag, 1))
-            emb_seqs = mb_emb_seqs[start_i : start_i + n_seqs]
+            emb_seqs = mb_emb_seqs[start_i: start_i + n_seqs]
             # Calculate attention activations (softmax over n_sequences_per_bag) (shape: (n_sequences_per_bag, 1))
             attention_weights = torch.softmax(attention_weights, dim=0)
             # Apply attention weights to sequence features (shape: (n_sequences_per_bag, d_v))
             emb_seqs_after_attention = emb_seqs * attention_weights
             # Compute weighted sum over sequence features after attention (format: (d_v,))
-            mb_emb_seqs_after_attention.append(emb_seqs_after_attention.sum(dim=0))
+            mb_emb_seqs_after_attention.append(
+                emb_seqs_after_attention.sum(dim=0))
             start_i += n_seqs
 
         # Stack representations of bags (shape (N, d_v))
-        emb_seqs_after_attention = torch.stack(mb_emb_seqs_after_attention, dim=0)
+        emb_seqs_after_attention = torch.stack(
+            mb_emb_seqs_after_attention, dim=0)
 
         # Calculate predictions (shape (N, n_outputs))
         predictions = self.output_nn(emb_seqs_after_attention)
@@ -541,7 +760,8 @@ class DeepRC(nn.Module):
         sequence_char_indices = sequence_char_indices.to(
             dtype=torch.long, device=self.device
         )
-        sequence_lengths = sequence_lengths.to(dtype=torch.long, device=self.device)
+        sequence_lengths = sequence_lengths.to(
+            dtype=torch.long, device=self.device)
         # Only send sequence counts to device, if using sequence counts
         if self.consider_seq_counts:
             counts_per_sequence = counts_per_sequence.to(
@@ -557,15 +777,18 @@ class DeepRC(nn.Module):
             size=features_one_hot_shape, dtype=self.embedding_dtype, device=self.device
         )
         # Set one-hot sequence features
-        features_one_hot = features_one_hot_padded[:, : sequence_char_indices.shape[1]]
+        features_one_hot = features_one_hot_padded[:,
+                                                   : sequence_char_indices.shape[1]]
         features_one_hot = features_one_hot.reshape((-1, n_features))
         features_one_hot[
-            torch.arange(features_one_hot.shape[0]), sequence_char_indices.reshape((-1))
+            torch.arange(
+                features_one_hot.shape[0]), sequence_char_indices.reshape((-1))
         ] = 1.0
         # Set padded sequence-parts to 0 (sequence_char_indices == -1 marks the padded positions)
         features_one_hot[sequence_char_indices.reshape((-1)) == -1, -1] = 0.0
         features_one_hot = features_one_hot.reshape(
-            (sequence_char_indices.shape[0], sequence_char_indices.shape[1], n_features)
+            (sequence_char_indices.shape[0],
+             sequence_char_indices.shape[1], n_features)
         )
         features_one_hot_padded[:, : sequence_char_indices.shape[1], :] = (
             features_one_hot
@@ -627,10 +850,10 @@ class DeepRC(nn.Module):
             for mb_i in mb_is.unbind(dim=0):
                 # Get inputs for current minibatch
                 inputs_mb = inputs[
-                    mb_i * self.reduction_mb_size : (mb_i + 1) * self.reduction_mb_size
+                    mb_i * self.reduction_mb_size: (mb_i + 1) * self.reduction_mb_size
                 ].to(device=self.device, dtype=self.embedding_dtype)
                 sequence_lengths_mb = sequence_lengths[
-                    mb_i * self.reduction_mb_size : (mb_i + 1) * self.reduction_mb_size
+                    mb_i * self.reduction_mb_size: (mb_i + 1) * self.reduction_mb_size
                 ].to(device=self.device, dtype=torch.long)
 
                 # Get sequence embedding (h())
@@ -639,7 +862,8 @@ class DeepRC(nn.Module):
                 ).to(dtype=torch.float32)
 
                 # Calculate attention weights before softmax (f())
-                attention_acts.append(self.attention_nn(emb_seqs).squeeze(dim=-1))
+                attention_acts.append(
+                    self.attention_nn(emb_seqs).squeeze(dim=-1))
 
             # Concatenate attention weights for all sequences
             attention_acts = torch.cat(attention_acts, dim=0)
