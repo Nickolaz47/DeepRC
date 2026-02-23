@@ -13,6 +13,7 @@ from typing import List
 import numpy as np
 import torch
 import torch.nn as nn
+import math
 
 
 def compute_position_features(max_seq_len, sequence_lengths, dtype=np.float16):
@@ -346,6 +347,132 @@ class SequenceEmbeddingCNNEnhanced(nn.Module):
             scale_outputs.append(pooled)
 
         return torch.cat(scale_outputs, dim=1)
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, max_len: int = 5000):
+        super(PositionalEncoding, self).__init__()
+        # Create a positional encoding matrix of shape (max_len, d_model)
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(
+            0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+
+        # Apply sine to even indices, cosine to odd indices
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        pe = pe.unsqueeze(0)  # Shape: (1, max_len, d_model)
+        # register_buffer ensures the tensor is moved to the correct device
+        # (GPU/CPU) alongside the model
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Add positional encoding to input embeddings
+        # x shape: (Batch, Seq_Len, Dim)
+        return x + self.pe[:, :x.size(1), :]
+
+
+class SequenceEmbeddingTransformer(nn.Module):
+    def __init__(self, n_input_features: int, d_model: int = 64,
+                 n_heads: int = 4, n_layers: int = 2, dropout: float = 0.1):
+        """
+        Sequence embedding using a Transformer Encoder (`h()` in DeepRC).
+        Provides global context like an LSTM but is highly parallelizable and
+        memory-efficient.
+
+        Parameters
+        ----------
+        n_input_features : int
+            Number of input features per sequence position (e.g., one-hot
+            embedding size).
+        d_model : int
+            Dimensionality of the internal embeddings and Transformer layers.
+        n_heads : int
+            Number of attention heads in the Multi-Head Attention mechanism.
+        n_layers : int
+            Number of sequential Transformer encoder blocks.
+        dropout : float
+            Dropout probability for regularization.
+        """
+        super(SequenceEmbeddingTransformer, self).__init__()
+
+        # Project input features to the Transformer's expected dimension
+        self.embedding = nn.Linear(n_input_features, d_model)
+        self.pos_encoder = PositionalEncoding(d_model)
+
+        # Transformer Encoder layer configuration
+        encoder_layers = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=n_heads,
+            dim_feedforward=d_model * 4,
+            dropout=dropout,
+            # Crucial: expects inputs in NLC format (Batch, Seq, Feature)
+            batch_first=True,
+            activation='gelu'
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layers, num_layers=n_layers)
+
+        # Output projection head (adds non-linearity and stabilizes embeddings)
+        self.output_head = nn.Sequential(
+            nn.Linear(d_model, d_model),
+            nn.Tanh()
+        )
+
+    def forward(self, inputs: torch.Tensor,
+                sequence_lengths: torch.Tensor = None,
+                *args, **kwargs) -> torch.Tensor:
+        """
+        Apply sequence embedding Transformer to inputs in NLC format.
+
+        Parameters
+        ----------
+        inputs: torch.Tensor
+            Torch tensor of shape (n_sequences, n_sequence_positions,
+            n_input_features).
+        sequence_lengths: torch.Tensor
+            Optional tensor of shape (n_sequences,) containing the unpadded
+            lengths of each sequence.
+
+        Returns
+        ---------
+        output: torch.Tensor
+            Sequences embedded to a tensor of shape (n_sequences, d_model),
+            compatible with DeepRC.
+        """
+        # Feature Projection + Positional Encoding
+        x = self.embedding(inputs)  # Output shape: (N, L, d_model)
+        x = self.pos_encoder(x)
+
+        # Dynamic Padding Masking
+        # If sequence_lengths is provided, we tell the Transformer to ignore
+        # padded elements.
+        padding_mask = None
+        if sequence_lengths is not None:
+            max_len = inputs.size(1)
+            # Create a boolean mask: True means "ignore this position"
+            # (it's padding)
+            positions = torch.arange(
+                max_len, device=inputs.device).unsqueeze(0)
+            padding_mask = positions >= sequence_lengths.unsqueeze(1)
+
+        # Pass through Transformer layers
+        x = self.transformer_encoder(x, src_key_padding_mask=padding_mask)
+
+        # Global Average Pooling (Context aware)
+        if padding_mask is not None:
+            # Set padded elements to 0.0 so they don't corrupt the sum
+            x = x.masked_fill(padding_mask.unsqueeze(-1), 0.0)
+            # Calculate mean using the actual sequence lengths (avoids
+            # dividing by padded zeros)
+            mean_emb = x.sum(dim=1) / sequence_lengths.unsqueeze(1).to(x.dtype)
+        else:
+            # Fallback to standard mean if no sequence lengths are provided
+            mean_emb = x.mean(dim=1)
+
+        # Final projection mapped to DeepRC's expected 2D format
+        return self.output_head(mean_emb)
 
 
 class ResidualBlock(nn.Module):
